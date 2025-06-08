@@ -1,6 +1,7 @@
 #debugging#
 import os
 import sys
+import streamlit as st  # also make sure this is at the top
 st.write("Current working directory:", os.getcwd())
 st.write("Files in CWD:", os.listdir())
 st.write("Files in model/:", os.listdir("model"))
