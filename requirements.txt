@@ -1,0 +1,13 @@
+streamlit
+pandas
+scikit-learn
+joblib
+matplotlib
+seaborn
+nltk
+textblob
+pdfkit
+openai
+langchain
+fastapi
+uvicorn
