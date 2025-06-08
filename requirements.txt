@@ -11,3 +11,4 @@ openai
 langchain
 fastapi
 uvicorn
+requests
