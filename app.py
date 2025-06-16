@@ -4,11 +4,12 @@ import requests
 
 # Local modules
 from model.scoring import score_transcript
-from analysis.analyzer import run_sensitivity_analysis
+from analysis.analyzer import run_sensitivity_analysis, plot_sensitivity_chart
 from analysis.sentiment_module import sentiment_analysis, plot_sentiment_chart
 from analysis.visuals import plot_risk_factors
 from card.card_generator import generate_incident_card
 from model.fallback import danger_score  # fallback if model fails
+
 
 # App config
 st.set_page_config(page_title="911 Danger Score Estimator", layout="wide")
@@ -34,10 +35,12 @@ with tabs[0]:
             score = danger_score(user_input)
             st.warning(f"⚠️ Using fallback (keyword-based) danger score: `{score:.2f}`")
 
-        st.markdown("### ⚙️ Sensitivity Analysis")
-        results = run_sensitivity_analysis(user_input)
-        st.table(pd.DataFrame(results))
-
+            st.markdown("---")
+            st.markdown("### ⚙️ Sensitivity Analysis (ML-Based)")
+            results = run_sensitivity_analysis(user_input)
+            st.table(pd.DataFrame(results))
+            plot_sensitivity_chart(results)
+            
         st.markdown("### 🧾 Printable Incident Card")
         html_card = generate_incident_card(user_input)
         st.components.v1.html(html_card, height=800, scrolling=True)
