@@ -34,15 +34,13 @@ def run_sensitivity_analysis(transcript: str) -> List[Dict[str, str]]:
 
     return results
 
-def plot_sensitivity_chart(results: List[Dict[str, str]]):
+def plot_sensitivity_chart(results):
     df = pd.DataFrame(results)
-    df['Color'] = df['Δ Change'].apply(lambda x: 'green' if x < 0 else 'red')
-
     plt.figure(figsize=(10, 6))
-    sns.barplot(data=df, x='Δ Change', y='Scenario', palette=df['Color'])
-    plt.axvline(0, color='gray', linestyle='--')
-    plt.title("🔍 Sensitivity Analysis Impact on Danger Score")
-    plt.xlabel("Change in Score")
+    sns.barplot(data=df, x='Δ Change', y='Scenario', hue=None)
+    plt.axvline(0, color='gray', linestyle='--', linewidth=1)
+    plt.title("Effect of Scenario Changes on Danger Score")
+    plt.xlabel("Δ Change in Danger Score")
     plt.ylabel("Scenario")
     st.pyplot(plt)
 
