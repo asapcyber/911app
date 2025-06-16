@@ -1,30 +1,61 @@
-from analysis.analyzer import danger_score
+from model.scoring import score_transcript
+from model.fallback import danger_score as fallback_score
 from typing import List
 
 def generate_worst_case_scenario(transcript: str) -> str:
-    if 'knife' in transcript.lower() or 'cutting herself' in transcript.lower():
+    """
+    Describes the worst plausible outcome based on ML danger score and known risk cues.
+    """
+    score = 0.0
+    try:
+        score = score_transcript(transcript)
+    except:
+        score = fallback_score(transcript)
+
+    has_weapon = 'knife' in transcript.lower() or 'stab' in transcript.lower()
+    has_self_harm = 'cutting herself' in transcript.lower()
+    has_history = 'police' in transcript.lower() or 'abused' in transcript.lower()
+
+    if score > 0.7 and has_weapon:
         return (
-            "If first responders underestimate the threat or fail to de-escalate, "
-            "the subject may brandish the knife, leading to a fatal encounter. "
-            "This could result in the subject being shot by police to protect themselves or others. "
-            "Key contributing factors: prior violent history, caller has fled, emotional instability, presence of a weapon."
+            "High likelihood of violent escalation. Subject may threaten or attack responders. "
+            "Police may be forced to use lethal force if de-escalation fails. "
+            "Contributing risk factors: weapon present, fleeing caller, volatile language, past incidents."
+        )
+    elif has_self_harm:
+        return (
+            "Subject may continue self-harming or attempt suicide if left alone. "
+            "Delays in response or misjudgment of risk could result in severe injury or death. "
+            "Mental health crisis team needed urgently."
         )
     else:
         return (
-            "If response is delayed or poorly coordinated, the subject may harm themselves severely. "
-            "Risk increases in absence of mental health professionals or if escalation is ignored."
+            "Situation may de-escalate, but risk remains due to unstable behavior. "
+            "Without immediate intervention, incident could deteriorate rapidly."
         )
 
+
 def generate_branching_scenarios(transcript: str) -> List[str]:
-    score = danger_score(transcript)
+    """
+    Provides alternative outcome paths with estimated probabilities adjusted by danger score.
+    """
+    try:
+        score = score_transcript(transcript)
+    except:
+        score = fallback_score(transcript)
+
     base_paths = [
-        ("🚔 Police arrive and de-escalate: Subject surrenders.", 0.2),
-        ("🧠 Crisis team intervenes: Subject hospitalized.", 0.2),
-        ("⚠️ Police enter blindly: Subject charges, force used.", 0.2),
-        ("🕰️ Delay: Subject harms self before help arrives.", 0.2),
-        ("👩‍👧 Family intervenes: Situation de-escalates or worsens.", 0.2)
+        ("🚔 Police arrive and de-escalate: Subject cooperates peacefully.", 0.2),
+        ("🧠 Crisis team intervenes: Subject stabilized and hospitalized.", 0.2),
+        ("⚠️ Subject attacks with weapon: Use of force required.", 0.2),
+        ("⏳ Delay in response: Subject harms self or others.", 0.2),
+        ("👤 Family member intervenes: De-escalation succeeds or escalates.", 0.2),
     ]
-    adjusted = [(desc, round(prob * (1 + score), 2)) for desc, prob in base_paths]
-    total = sum(prob for _, prob in adjusted)
-    normalized = [(desc, round(prob / total, 2)) for desc, prob in adjusted]
+
+    # Danger score adjusts perceived probabilities
+    adjusted_paths = [(desc, round(prob * (1 + score), 2)) for desc, prob in base_paths]
+    total = sum(prob for _, prob in adjusted_paths)
+    normalized = [(desc, round(prob / total, 2)) for desc, prob in adjusted_paths]
+
     return [f"{desc} (Est. Prob: {prob})" for desc, prob in normalized]
+
