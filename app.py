@@ -1,62 +1,61 @@
+import os
 import streamlit as st
 import pandas as pd
-import requests
 
-# Local modules
 from model.scoring import score_transcript
+from model.fallback import danger_score as fallback_score
 from analysis.analyzer import run_sensitivity_analysis, plot_sensitivity_chart
 from analysis.sentiment_module import sentiment_analysis, plot_sentiment_chart
 from analysis.visuals import plot_risk_factors
 from card.card_generator import generate_incident_card
-from model.fallback import danger_score  # fallback if model fails
 
-
-# App config
-st.set_page_config(page_title="911 Danger Score Estimator", layout="wide")
+# Set up Streamlit page
+st.set_page_config(page_title="911 Danger Score Estimator")
 st.title("📞 911 Danger Score Estimator")
 
 st.markdown("""
-This tool processes 911 call transcripts to estimate threat level using a trained ML model,
-generate worst-case and branching scenarios, suggest next-best actions, and offer real-time MCP agent support.
+Analyze 911 call transcripts using machine learning to assess potential threat levels.  
+Includes dynamic risk scoring, sensitivity analysis, scenario planning, and emotion analysis.
 """)
 
-# Tabs for functionality
-tabs = st.tabs(["📋 Transcript Analysis", "🧠 Ask the MCP Agent"])
+# Input field
+user_input = st.text_area("📋 Paste a 911 call transcript below:", height=300)
 
-# --- TAB 1: Transcript Analysis --- #
-with tabs[0]:
-    user_input = st.text_area("Paste a 911 call transcript below:", height=300)
+if user_input:
+    st.markdown("## 🔎 ML-Based Danger Score")
+    score = score_transcript(user_input)
+    st.metric(label="Estimated Danger Score", value=f"{score:.2f}", delta=None)
 
-    if user_input:
-        try:
-            score = score_transcript(user_input)
-            st.success(f"🧠 ML-Based Danger Score: `{score:.2f}`")
-        except Exception:
-            score = danger_score(user_input)
-            st.warning(f"⚠️ Using fallback (keyword-based) danger score: `{score:.2f}`")
+    # Sensitivity analysis
+    st.markdown("---")
+    st.markdown("## ⚙️ Sensitivity Analysis (ML-Based)")
+    results = run_sensitivity_analysis(user_input)
+    st.table(pd.DataFrame(results))
+    plot_sensitivity_chart(results)
 
-            st.markdown("---")
-            st.markdown("### ⚙️ Sensitivity Analysis (ML-Based)")
-            results = run_sensitivity_analysis(user_input)
-            st.table(pd.DataFrame(results))
-            plot_sensitivity_chart(results)
-            
-        st.markdown("### 🧾 Printable Incident Card")
-        html_card = generate_incident_card(user_input)
-        st.components.v1.html(html_card, height=800, scrolling=True)
+    # Incident card generation
+    st.markdown("---")
+    st.markdown("## 🧾 Printable Incident Card")
+    html_card = generate_incident_card(user_input)
+    st.components.v1.html(html_card, height=800, scrolling=True)
 
-        if st.button("📄 Download Incident Card as HTML"):
-            with open("incident_card.html", "w") as f:
-                f.write(html_card)
-            st.success("✅ Incident card saved as HTML. You may print or convert to PDF.")
+    if st.button("📄 Download Incident Card as HTML"):
+        with open("incident_card.html", "w") as f:
+            f.write(html_card)
+        st.success("Incident card saved as HTML. You can convert this to PDF using your browser or wkhtmltopdf.")
 
-        st.markdown("### 📉 Sentiment & Emotion Analysis")
-        sentiment_df = sentiment_analysis(user_input)
-        plot_sentiment_chart(sentiment_df)
-        st.dataframe(sentiment_df)
+    # Sentiment + emotion analysis
+    st.markdown("---")
+    st.markdown("## 📉 Sentiment & Emotion Analysis")
+    sentiment_df = sentiment_analysis(user_input)
+    plot_sentiment_chart(sentiment_df)
+    st.dataframe(sentiment_df)
 
-        st.markdown("### 🧱 Risk Factor Breakdown")
-        plot_risk_factors(user_input)
+    # Risk factor contribution chart
+    st.markdown("---")
+    st.markdown("## 🧱 Risk Factor Breakdown")
+    plot_risk_factors(user_input)
+
 
 # --- TAB 2: MCP Agent Interface --- #
 with tabs[1]:

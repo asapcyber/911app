@@ -1,4 +1,5 @@
-from analysis.analyzer import danger_score, run_sensitivity_analysis
+from analysis.analyzer import run_sensitivity_analysis
+from model.scoring import score_transcript
 from model.scenario_planner import generate_worst_case_scenario, generate_branching_scenarios
 
 def generate_incident_card(transcript: str) -> str:
