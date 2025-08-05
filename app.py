@@ -64,7 +64,7 @@ with tabs[3]:
         sentiment, emotions = sentiment_analysis(user_input)
         st.info(f"📈 Dominant Sentiment: **{sentiment}**")
         st.markdown("📊 Emotie verdeling:")
-        plot_sentiment_chart(emotions)
+        plot_sentiment_chart(sentiment)
 
         st.subheader("⚠️ Risicofactoren Visualisatie")
         plot_risk_factors(user_input)
