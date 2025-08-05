@@ -12,6 +12,16 @@ class ThreatType(enum.Enum):
     online = "online"
     unknown = "unknown"
 
+class CallRecord(Base):
+    __tablename__ = 'call_records'
+
+    id = Column(Integer, primary_key=True, index=True)
+    timestamp = Column(DateTime, default=datetime.utcnow)
+    transcript = Column(String, nullable=False)
+    danger_score = Column(Float, nullable=True)  # Optional: set during analysis
+    sentiment = Column(String, nullable=True)
+    emotions = Column(String, nullable=True)     # Stored as comma-separated string
+    
 class Call(Base):
     __tablename__ = 'calls'
     
