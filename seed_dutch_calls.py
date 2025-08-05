@@ -54,3 +54,4 @@ for call in dutch_calls:
 
 db.commit()
 db.close()
+print("Seeded Dutch 112 calls successfully.")
