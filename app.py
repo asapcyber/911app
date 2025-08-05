@@ -1,77 +1,106 @@
 import streamlit as st
-import pandas as pd
+import requests
 from model.scoring import score_transcript
-from model.fallback import danger_score
 from analysis.analyzer import run_sensitivity_analysis, plot_sensitivity_chart
 from analysis.sentiment_module import sentiment_analysis, plot_sentiment_chart
 from analysis.visuals import plot_risk_factors
 from card.card_generator import generate_incident_card
-import requests
+from model.training import retrain_model_from_db
 
-st.set_page_config(page_title="911 Danger Score Estimator", layout="wide")
+st.set_page_config(page_title="112 Incident Analyzer", layout="wide")
 
-st.title("📞 911 Danger Score Estimator & MCP Assistant")
-st.markdown("""
-Analyze a 911 call transcript to assess danger levels, simulate response outcomes, and consult the AI MCP agent for tactical advice.
-""")
+st.title("📞 112 Incident Analyzer (Nederland)")
+st.markdown("Analyseer een 112-oproep om risico's in te schatten, emoties te detecteren en een incidentkaart te genereren.")
 
-user_input = st.text_area("Paste a 911 call transcript below:", height=300)
+# --- TABS ---
+tabs = st.tabs([
+    "📞 Invoer & Analyse", 
+    "💬 Sentiment & Risico’s", 
+    "📝 Incidentkaart", 
+    "🤖 MCP Agent", 
+    "⚙️ Beheer"
+])
 
-if user_input:
-    tabs = st.tabs([
-        "🔍 Danger Analysis",
-        "🤖 MCP Agent",
-        "🧾 Incident Card",
-        "📉 Sentiment & Risk"
-    ])
+# Global storage for analysis (shared across tabs)
+if "last_transcript" not in st.session_state:
+    st.session_state["last_transcript"] = ""
+    st.session_state["last_score"] = 0.0
+    st.session_state["last_analysis"] = []
+    st.session_state["last_sentiment"] = ""
+    st.session_state["last_emotions"] = []
 
-    # --- TAB 1: Danger Score ---
-    with tabs[0]:
-        st.markdown("## 🔎 ML-Based Danger Score")
-        try:
-            score = score_transcript(user_input)
-        except Exception as e:
-            score = danger_score(user_input)
-            st.warning(f"Using fallback (keyword-based) danger score: {score:.2f}")
+# --- TAB 1: Transcript Invoer + Analyse ---
+with tabs[0]:
+    st.subheader("Voer transcript in van 112-oproep")
+    user_input = st.text_area("Transcript", value=st.session_state["last_transcript"], height=300)
 
-        st.metric(label="Estimated Danger Score", value=f"{score:.2f}")
+    if st.button("🔍 Analyseer"):
+        st.session_state["last_transcript"] = user_input
+        score = score_transcript(user_input)
+        st.session_state["last_score"] = score
 
-        st.markdown("## ⚙️ Sensitivity Analysis")
+        st.subheader("📊 Gevaar Score")
+        st.metric("Gevaarscore", f"{score:.2f} / 1.00")
+
+        st.subheader("🔬 Gevoeligheidsanalyse")
         results = run_sensitivity_analysis(user_input)
-        st.table(pd.DataFrame(results))
+        st.session_state["last_analysis"] = results
         plot_sensitivity_chart(results)
+        plot_risk_factors(results)
 
-    # --- TAB 2: MCP Agent Interface ---
-    with tabs[1]:
-        st.markdown("## 🤖 Ask MCP Agent for Guidance")
-        mcp_query = st.text_input("Dispatcher/MCP Question", placeholder="e.g. Caller fled before arrival — what now?")
-        if mcp_query:
+        st.subheader("💬 Sentiment & Emoties")
+        sentiment, emotions = sentiment_analysis(user_input)
+        st.session_state["last_sentiment"] = sentiment
+        st.session_state["last_emotions"] = emotions
+        st.write(f"📌 Sentiment: **{sentiment}**")
+        st.write("📌 Herkende emoties:", ", ".join(emotions))
+        plot_sentiment_chart(user_input)
+
+# --- TAB 2: Sentiment + Risico's ---
+with tabs[1]:
+    st.subheader("💬 Sentiment & Risicofactoren")
+    if st.session_state["last_transcript"]:
+        st.write(f"📌 Sentiment: **{st.session_state['last_sentiment']}**")
+        st.write("📌 Herkende emoties:", ", ".join(st.session_state["last_emotions"]))
+        plot_sentiment_chart(st.session_state["last_transcript"])
+        plot_risk_factors(st.session_state["last_analysis"])
+    else:
+        st.info("Voer eerst een transcript in via tab 1.")
+
+# --- TAB 3: Incidentkaart ---
+with tabs[2]:
+    st.subheader("📝 Incidentkaart")
+    if st.session_state["last_transcript"]:
+        html_card = generate_incident_card(st.session_state["last_transcript"])
+        st.components.v1.html(html_card, height=400, scrolling=True)
+    else:
+        st.info("Voer eerst een transcript in via tab 1.")
+
+# --- TAB 4: MCP Agent Interface ---
+with tabs[3]:
+    st.subheader("🤖 Vraag advies aan MCP Agent")
+    mcp_query = st.text_input("Stel een vraag", placeholder="Bijv. De melder is gevlucht bij aankomst — wat nu?")
+    if mcp_query and st.session_state["last_transcript"]:
+        try:
+            response = requests.post("http://localhost:8000/query", json={
+                "query": mcp_query,
+                "context": st.session_state["last_transcript"]
+            })
+            st.markdown(f"**🧠 Antwoord van MCP Agent:** {response.json()['response']}")
+        except Exception as e:
+            st.error(f"❌ Verbinding met MCP Agent mislukt. Draait deze lokaal? Foutmelding: {e}")
+    elif not st.session_state["last_transcript"]:
+        st.info("Voer eerst een transcript in via tab 1.")
+
+# --- TAB 5: Beheer Paneel ---
+with tabs[4]:
+    st.subheader("⚙️ Modelbeheer")
+    st.markdown("Train het gevaarmodel opnieuw op basis van opgeslagen oproepen in de database.")
+
+    if st.button("🔁 Hertrain model"):
+        with st.spinner("Model wordt hertraind..."):
             try:
-                response = requests.post("http://localhost:8000/query", json={
-                    "query": mcp_query,
-                    "context": user_input
-                })
-                st.markdown(f"**🧠 MCP Agent Response:** {response.json()['response']}")
+                n = retrain_model_from_db()
+                st.success(f"✅ Model hertraind met {n} records.")
             except Exception as e:
-                st.error(f"Failed to connect to MCP Agent. Is it running locally? Error: {e}")
-
-    # --- TAB 3: Incident Card ---
-    with tabs[2]:
-        st.markdown("## 🧾 Printable Incident Card")
-        html_card = generate_incident_card(user_input)
-        st.components.v1.html(html_card, height=800, scrolling=True)
-
-        if st.button("📄 Download Incident Card as HTML"):
-            with open("incident_card.html", "w") as f:
-                f.write(html_card)
-            st.success("Incident card saved as HTML. You can convert it to PDF.")
-
-    # --- TAB 4: Sentiment & Risk ---
-    with tabs[3]:
-        st.markdown("## 📉 Sentiment & Emotion Analysis")
-        sentiment_df = sentiment_analysis(user_input)
-        plot_sentiment_chart(sentiment_df)
-        st.dataframe(sentiment_df)
-
-        st.markdown("## 🧱 Risk Factor Breakdown")
-        plot_risk_factors(user_input)
+                st.error(f"❌ Hertraining mislukt: {e}")
