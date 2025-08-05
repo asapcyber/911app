@@ -1,47 +1,49 @@
+# analysis/analyzer.py
 import re
 from typing import List, Dict
-from model.scoring import score_transcript
-import matplotlib.pyplot as plt
-import seaborn as sns
-import pandas as pd
 import streamlit as st
+import pandas as pd
+import seaborn as sns
+import matplotlib.pyplot as plt
+from model.scoring import model
 
-def run_sensitivity_analysis(transcript: str) -> List[Dict[str, str]]:
-    """
-    Generates variations of the transcript and evaluates danger score changes using the ML model.
-    """
-    base_score = score_transcript(transcript)
+def run_sensitivity_analysis(transcript: str) -> pd.DataFrame:
+    """Returns dynamic top N contributing terms based on TF-IDF and model importance."""
 
-    variants = [
-        ("Remove 'knife'", re.sub(r'\bknife\b', '', transcript, flags=re.I)),
-        ("Remove 'cutting herself'", re.sub(r'cutting herself', '', transcript, flags=re.I)),
-        ("Remove 'stab me'", re.sub(r'stab.*', '', transcript, flags=re.I)),
-        ("Remove fleeing language", re.sub(r'\bflee\b|\brun\b|\bdrove away\b', '', transcript, flags=re.I)),
-        ("Remove reference to police", re.sub(r'police.*?times', '', transcript, flags=re.I)),
-        ("Replace 'crazy' with 'confused'", re.sub(r'crazy', 'confused', transcript, flags=re.I)),
-        ("Tone made calmer", re.sub(r'i have to run.*', 'She may be unstable, but I’m okay.', transcript, flags=re.I))
-    ]
-
-    results = []
-    for label, modified in variants:
-        new_score = score_transcript(modified)
-        delta = round(new_score - base_score, 2)
-        results.append({
-            "Scenario": label,
-            "Danger Score": round(new_score, 2),
-            "Δ Change": delta
+    if not model or not hasattr(model.named_steps["model"], "feature_importances_"):
+        return pd.DataFrame({
+            "Scenario": ["ML model not available or does not support feature importance."],
+            "Δ Change": [0.0],
+            "Color": ["gray"]
         })
 
-    return results
+    tfidf = model.named_steps["tfidf"]
+    regressor = model.named_steps["model"]
 
-def plot_sensitivity_chart(results):
-    df = pd.DataFrame(results)
-    plt.figure(figsize=(10, 6))
-    sns.barplot(data=df, x='Δ Change', y='Scenario', hue=None)
-    plt.axvline(0, color='gray', linestyle='--', linewidth=1)
-    plt.title("Effect of Scenario Changes on Danger Score")
-    plt.xlabel("Δ Change in Danger Score")
-    plt.ylabel("Scenario")
-    st.pyplot(plt)
+    # Transform transcript to get tf-idf vector
+    tfidf_vector = tfidf.transform([transcript])
+    feature_array = tfidf.get_feature_names_out()
+    tfidf_values = tfidf_vector.toarray()[0]
 
+    # Match TF-IDF score × feature importance
+    importance_scores = []
+    for i, score in enumerate(tfidf_values):
+        if score > 0:
+            term = feature_array[i]
+            importance = regressor.feature_importances_[i] if i < len(regressor.feature_importances_) else 0
+            impact = score * importance
+            importance_scores.append((term, impact))
 
+    top_features = sorted(importance_scores, key=lambda x: x[1], reverse=True)[:5]
+
+    df = pd.DataFrame(top_features, columns=["Scenario", "Δ Change"])
+    df["Color"] = ["red", "orange", "gold", "green", "blue"][:len(df)]
+
+    return df
+
+def plot_sensitivity_chart(df: pd.DataFrame):
+    plt.figure(figsize=(8, 4))
+    sns.barplot(data=df, x='Δ Change', y='Scenario', palette=df['Color'])
+    plt.title("Sensitivity Analysis – Top Risk Contributors")
+    plt.tight_layout()
+    plt.show()
