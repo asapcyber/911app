@@ -42,8 +42,19 @@ def run_sensitivity_analysis(transcript: str) -> pd.DataFrame:
     return df
 
 def plot_sensitivity_chart(df: pd.DataFrame):
+    import matplotlib.pyplot as plt
+
     plt.figure(figsize=(8, 4))
-    sns.barplot(data=df, x='Δ Change', y='Scenario', palette=df['Color'])
+
+    # Plot bars manually to assign individual colors
+    for i, row in df.iterrows():
+        plt.barh(
+            y=row["Scenario"],
+            width=row["Δ Change"],
+            color=row["Color"]
+        )
+
+    plt.xlabel("Δ Change")
     plt.title("Sensitivity Analysis – Top Risk Contributors")
     plt.tight_layout()
-    plt.show()
+    st.pyplot(plt)
