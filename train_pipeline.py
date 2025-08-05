@@ -1,41 +1,34 @@
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy import create_engine
-from model.models import Call
-import pandas as pd
-import joblib
+# train_pipeline.py
+
+from model.db import SessionLocal
+from model.models import CallRecord
 from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.ensemble import RandomForestRegressor
+from sklearn.tree import DecisionTreeRegressor
 from sklearn.pipeline import Pipeline
+import joblib
+import pandas as pd
 
-# Connect to the DB
-engine = create_engine('sqlite:///112_calls.db')
-Session = sessionmaker(bind=engine)
-session = Session()
+# Step 1: Load from DB
+db = SessionLocal()
+records = db.query(CallRecord).all()
+db.close()
 
-# Fetch training data
-def fetch_training_data():
-    calls = session.query(Call).all()
-    data = []
-    for call in calls:
-        data.append({
-            "transcript": call.transcript,
-            "danger_score": call.danger_score
-        })
-    return pd.DataFrame(data)
+# Step 2: Convert ORM objects to usable dict format
+call_data = [{
+    'transcript': r.transcript,
+    'danger_score': r.danger_score
+} for r in records]
 
-df = fetch_training_data()
+df = pd.DataFrame(call_data)
 
-# Train model
-X = df['transcript']
-y = df['danger_score']
-
+# Step 3: Train pipeline
 pipeline = Pipeline([
-    ("tfidf", TfidfVectorizer()),
-    ("model", RandomForestRegressor(n_estimators=100, random_state=42))
+    ('tfidf', TfidfVectorizer(max_features=500)),
+    ('model', DecisionTreeRegressor())
 ])
 
-pipeline.fit(X, y)
+pipeline.fit(df['transcript'], df['danger_score'])
 
-# Save to file
-joblib.dump(pipeline, "danger_score_model.pkl")
-print("✅ danger_score_model.pkl updated successfully!")
+# Step 4: Save model
+joblib.dump(pipeline, 'danger_score_model.pkl')
+print("✅ New danger_score_model.pkl created.")
