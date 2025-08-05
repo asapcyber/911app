@@ -6,10 +6,14 @@ def generate_incident_card(transcript: str) -> str:
     score = score_transcript(transcript)
     analysis = run_sensitivity_analysis(transcript)
 
-    bullet_points = "".join(
-        f"<li>{item['Scenario']}: Δ {item['Δ Change']}</li>"
-        for item in analysis
-    )
+    bullet_points = ""
+
+    if isinstance(analysis, list):
+        for item in analysis:
+            scenario = item.get('Scenario')
+            delta = item.get('Δ Change') or item.get('Delta Change') or "N/A"
+            if scenario:
+                bullet_points += f"<li>{scenario}: Δ {delta}</li>"
 
     html = f"""
     <div style='font-family: Arial, sans-serif; padding: 10px; border: 1px solid #ccc;'>
@@ -18,7 +22,7 @@ def generate_incident_card(transcript: str) -> str:
         <p><strong>🔥 Danger Score:</strong> {score:.2f}</p>
         <p><strong>🔍 Top Risk Factors:</strong></p>
         <ul>
-            {bullet_points}
+            {bullet_points or '<li>No risk factors identified.</li>'}
         </ul>
         <p><strong>🚨 Use this card to guide first responder decisions based on ML-derived risk.</strong></p>
     </div>
