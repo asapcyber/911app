@@ -7,7 +7,8 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 
 # Dynamically extract Dutch keywords
 def extract_dutch_keywords(transcript, top_n=5):
-    vectorizer = TfidfVectorizer(stop_words="dutch", max_features=50)
+    #vectorizer = TfidfVectorizer(stop_words="dutch", max_features=50)
+    vectorizer = TfidfVectorizer()  # temporarily disable stop words filtering
     X = vectorizer.fit_transform([transcript])
     tfidf_scores = dict(zip(vectorizer.get_feature_names_out(), X.toarray()[0]))
     sorted_keywords = sorted(tfidf_scores.items(), key=lambda x: x[1], reverse=True)
