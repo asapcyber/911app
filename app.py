@@ -7,100 +7,73 @@ from analysis.visuals import plot_risk_factors
 from card.card_generator import generate_incident_card
 from model.training import retrain_model_from_db
 
-st.set_page_config(page_title="112 Incident Analyzer", layout="wide")
+st.set_page_config(page_title="112 Analyse App", layout="wide")
 
-st.title("📞 112 Incident Analyzer (Nederland)")
-st.markdown("Analyseer een 112-oproep om risico's in te schatten, emoties te detecteren en een incidentkaart te genereren.")
+st.title("🚨 112 Analyse Applicatie")
+st.markdown("Beoordeel inkomende 112-oproepen op risico, sentiment en volgende acties.")
 
-# --- TABS ---
+# Tabs
 tabs = st.tabs([
-    "📞 Invoer & Analyse", 
-    "💬 Sentiment & Risico’s", 
-    "📝 Incidentkaart", 
-    "🤖 MCP Agent", 
-    "⚙️ Beheer"
+    "📞 Analyseer 112 Oproep",
+    "🧠 MCP Agent",
+    "📋 Incidentkaart",
+    "💬 Sentiment & Risico",
+    "🛠️ Admin - Hertrain Model"
 ])
 
-# Global storage for analysis (shared across tabs)
-if "last_transcript" not in st.session_state:
-    st.session_state["last_transcript"] = ""
-    st.session_state["last_score"] = 0.0
-    st.session_state["last_analysis"] = []
-    st.session_state["last_sentiment"] = ""
-    st.session_state["last_emotions"] = []
-
-# --- TAB 1: Transcript Invoer + Analyse ---
+# --- TAB 1: Analyseer 112 Oproep ---
 with tabs[0]:
-    st.subheader("Voer transcript in van 112-oproep")
-    user_input = st.text_area("Transcript", value=st.session_state["last_transcript"], height=300)
+    st.subheader("Transcript invoeren")
+    user_input = st.text_area("Plak hier de transcriptie van de 112-oproep", height=300)
 
-    if st.button("🔍 Analyseer"):
-        st.session_state["last_transcript"] = user_input
+    if user_input:
+        # 1. Score
         score = score_transcript(user_input)
-        st.session_state["last_score"] = score
+        st.success(f"Gevaar Score: **{score:.2f}** (0 = Laag risico, 1 = Hoog risico)")
 
-        st.subheader("📊 Gevaar Score")
-        st.metric("Gevaarscore", f"{score:.2f} / 1.00")
-
-        st.subheader("🔬 Gevoeligheidsanalyse")
-        results = run_sensitivity_analysis(user_input)
-        st.session_state["last_analysis"] = results
+        # 2. Sensitivity
+        st.subheader("🔍 Gevoeligheidsanalyse")
+        results = run_sensitivity_analysis(user_input, base_score=score)
         plot_sensitivity_chart(results)
-        plot_risk_factors(user_input)
 
-        st.subheader("💬 Sentiment & Emoties")
-        sentiment, emotions = sentiment_analysis(user_input)
-        st.session_state["last_sentiment"] = sentiment
-        st.session_state["last_emotions"] = emotions
-        st.write(f"📌 Sentiment: **{sentiment}**")
-        st.write("📌 Herkende emoties:", ", ".join(emotions))
-        plot_sentiment_chart(user_input)
-
-# --- TAB 2: Sentiment + Risico's ---
+# --- TAB 2: MCP Agent Interface ---
 with tabs[1]:
-    st.subheader("💬 Sentiment & Risicofactoren")
-    if st.session_state["last_transcript"]:
-        st.write(f"📌 Sentiment: **{st.session_state['last_sentiment']}**")
-        st.write("📌 Herkende emoties:", ", ".join(st.session_state["last_emotions"]))
-        plot_sentiment_chart(st.session_state["last_transcript"])
-        plot_risk_factors(st.session_state["last_analysis"])
-    else:
-        st.info("Voer eerst een transcript in via tab 1.")
-
-# --- TAB 3: Incidentkaart ---
-with tabs[2]:
-    st.subheader("📝 Incidentkaart")
-    if st.session_state["last_transcript"]:
-        html_card = generate_incident_card(st.session_state["last_transcript"])
-        st.components.v1.html(html_card, height=400, scrolling=True)
-    else:
-        st.info("Voer eerst een transcript in via tab 1.")
-
-# --- TAB 4: MCP Agent Interface ---
-with tabs[3]:
-    st.subheader("🤖 Vraag advies aan MCP Agent")
-    mcp_query = st.text_input("Stel een vraag", placeholder="Bijv. De melder is gevlucht bij aankomst — wat nu?")
-    if mcp_query and st.session_state["last_transcript"]:
+    st.subheader("Stel een vraag aan de MCP Agent")
+    mcp_query = st.text_input("Vraag van centralist/hulpverlener", placeholder="Bijv. De melder is vertrokken — wat nu?")
+    if mcp_query and user_input:
         try:
             response = requests.post("http://localhost:8000/query", json={
                 "query": mcp_query,
-                "context": st.session_state["last_transcript"]
+                "context": user_input
             })
-            st.markdown(f"**🧠 Antwoord van MCP Agent:** {response.json()['response']}")
+            st.markdown(f"**🧠 Antwoord van de MCP Agent:** {response.json()['response']}")
         except Exception as e:
-            st.error(f"❌ Verbinding met MCP Agent mislukt. Draait deze lokaal? Foutmelding: {e}")
-    elif not st.session_state["last_transcript"]:
-        st.info("Voer eerst een transcript in via tab 1.")
+            st.error(f"Kan geen verbinding maken met de MCP Agent. Draait de server lokaal? Fout: {e}")
 
-# --- TAB 5: Beheer Paneel ---
+# --- TAB 3: Incidentkaart ---
+with tabs[2]:
+    if user_input:
+        st.subheader("📋 Printbare Incidentkaart")
+        html_card = generate_incident_card(user_input)
+        st.components.v1.html(html_card, height=500, scrolling=True)
+
+# --- TAB 4: Sentiment & Risico ---
+with tabs[3]:
+    if user_input:
+        st.subheader("💬 Sentiment Analyse")
+        sentiment, emotions = sentiment_analysis(user_input)
+        st.info(f"📈 Dominant Sentiment: **{sentiment}**")
+        st.markdown("📊 Emotie verdeling:")
+        plot_sentiment_chart(emotions)
+
+        st.subheader("⚠️ Risicofactoren Visualisatie")
+        plot_risk_factors(user_input)
+
+# --- TAB 5: Admin - Hertrain Model ---
 with tabs[4]:
-    st.subheader("⚙️ Modelbeheer")
-    st.markdown("Train het gevaarmodel opnieuw op basis van opgeslagen oproepen in de database.")
+    st.subheader("🔄 Hertrain gevaarmodel")
+    st.markdown("Klik op de knop hieronder om het model opnieuw te trainen op basis van de laatste data in de database.")
+    if st.button("Model hertrainen"):
+        retrain_model_from_db()
+        st.success("✅ Model succesvol hertraind en opgeslagen als danger_score_model.pkl.")
 
-    if st.button("🔁 Hertrain model"):
-        with st.spinner("Model wordt hertraind..."):
-            try:
-                n = retrain_model_from_db()
-                st.success(f"✅ Model hertraind met {n} records.")
-            except Exception as e:
-                st.error(f"❌ Hertraining mislukt: {e}")

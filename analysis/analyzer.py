@@ -1,60 +1,42 @@
-# analysis/analyzer.py
-import re
-from typing import List, Dict
-import streamlit as st
 import pandas as pd
-import seaborn as sns
 import matplotlib.pyplot as plt
-from model.scoring import model
+import seaborn as sns
+import streamlit as st
+from model.scoring import danger_score
+from sklearn.feature_extraction.text import TfidfVectorizer
 
-def run_sensitivity_analysis(transcript: str) -> pd.DataFrame:
-    """Returns dynamic top N contributing terms based on TF-IDF and model importance."""
+# Dynamically extract Dutch keywords
+def extract_dutch_keywords(transcript, top_n=5):
+    vectorizer = TfidfVectorizer(stop_words="dutch", max_features=50)
+    X = vectorizer.fit_transform([transcript])
+    tfidf_scores = dict(zip(vectorizer.get_feature_names_out(), X.toarray()[0]))
+    sorted_keywords = sorted(tfidf_scores.items(), key=lambda x: x[1], reverse=True)
+    return [kw for kw, score in sorted_keywords[:top_n]]
 
-    if not model or not hasattr(model.named_steps["model"], "feature_importances_"):
-        return pd.DataFrame({
-            "Scenario": ["ML model not available or does not support feature importance."],
-            "Δ Change": [0.0],
-            "Color": ["gray"]
+# Run dynamic sensitivity analysis using Dutch keywords
+def run_sensitivity_analysis(transcript):
+    base_score = danger_score(transcript)
+    keywords = extract_dutch_keywords(transcript)
+    results = []
+
+    for word in keywords:
+        modified = transcript.replace(word, "")
+        new_score = danger_score(modified)
+        delta = round(base_score - new_score, 2)
+        color = "red" if delta > 0.1 else "orange" if delta > 0.05 else "green"
+        results.append({
+            "Scenario": f"Zonder '{word}'",
+            "Danger Score": round(new_score, 2),
+            "Δ Change": delta,
+            "Color": color
         })
 
-    tfidf = model.named_steps["tfidf"]
-    regressor = model.named_steps["model"]
+    return results
 
-    # Transform transcript to get tf-idf vector
-    tfidf_vector = tfidf.transform([transcript])
-    feature_array = tfidf.get_feature_names_out()
-    tfidf_values = tfidf_vector.toarray()[0]
-
-    # Match TF-IDF score × feature importance
-    importance_scores = []
-    for i, score in enumerate(tfidf_values):
-        if score > 0:
-            term = feature_array[i]
-            importance = regressor.feature_importances_[i] if i < len(regressor.feature_importances_) else 0
-            impact = score * importance
-            importance_scores.append((term, impact))
-
-    top_features = sorted(importance_scores, key=lambda x: x[1], reverse=True)[:5]
-
-    df = pd.DataFrame(top_features, columns=["Scenario", "Δ Change"])
-    df["Color"] = ["red", "orange", "gold", "green", "blue"][:len(df)]
-
-    return df
-
-def plot_sensitivity_chart(df: pd.DataFrame):
-    import matplotlib.pyplot as plt
-
+# Sensitivity chart
+def plot_sensitivity_chart(results):
+    df = pd.DataFrame(results)
     plt.figure(figsize=(8, 4))
-
-    # Plot bars manually to assign individual colors
-    for i, row in df.iterrows():
-        plt.barh(
-            y=row["Scenario"],
-            width=row["Δ Change"],
-            color=row["Color"]
-        )
-
-    plt.xlabel("Δ Change")
-    plt.title("Sensitivity Analysis – Top Risk Contributors")
-    plt.tight_layout()
+    sns.barplot(data=df, x="Δ Change", y="Scenario", palette=df["Color"].tolist())
+    plt.title("Gevoeligheidsanalyse van het Gevaar Score")
     st.pyplot(plt)

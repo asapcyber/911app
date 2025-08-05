@@ -18,10 +18,11 @@ class CallRecord(Base):
     id = Column(Integer, primary_key=True, index=True)
     timestamp = Column(DateTime, default=datetime.utcnow)
     transcript = Column(String, nullable=False)
+    threat_type = Column(String, nullable=True)
     danger_score = Column(Float, nullable=True)  # Optional: set during analysis
     sentiment = Column(String, nullable=True)
     emotions = Column(String, nullable=True)     # Stored as comma-separated string
-    
+
 class Call(Base):
     __tablename__ = 'calls'
     
