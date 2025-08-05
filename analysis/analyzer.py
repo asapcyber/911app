@@ -2,7 +2,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 import streamlit as st
-from model.scoring import danger_score
+from model.scoring import score_transcript
 from sklearn.feature_extraction.text import TfidfVectorizer
 
 # Dynamically extract Dutch keywords
@@ -15,13 +15,13 @@ def extract_dutch_keywords(transcript, top_n=5):
 
 # Run dynamic sensitivity analysis using Dutch keywords
 def run_sensitivity_analysis(transcript):
-    base_score = danger_score(transcript)
+    base_score = score_transcript(transcript)
     keywords = extract_dutch_keywords(transcript)
     results = []
 
     for word in keywords:
         modified = transcript.replace(word, "")
-        new_score = danger_score(modified)
+        new_score = score_transcript(modified)
         delta = round(base_score - new_score, 2)
         color = "red" if delta > 0.1 else "orange" if delta > 0.05 else "green"
         results.append({
