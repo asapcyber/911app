@@ -46,7 +46,7 @@ with tabs[0]:
         results = run_sensitivity_analysis(user_input)
         st.session_state["last_analysis"] = results
         plot_sensitivity_chart(results)
-        plot_risk_factors(results)
+        plot_risk_factors(user_input)
 
         st.subheader("💬 Sentiment & Emoties")
         sentiment, emotions = sentiment_analysis(user_input)
