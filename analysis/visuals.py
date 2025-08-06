@@ -4,27 +4,21 @@ import seaborn as sns
 import streamlit as st
 
 def plot_risk_factors(transcript: str):
-    features = {
-        'knife': 0.2,
-        'cutting herself': 0.2,
-        'stab': 0.2,
-        'flee': 0.15,
-        'run': 0.1,
-        'police': 0.05,
-        'abused': 0.05,
-        'crazy': 0.05,
-        'dangerous': 0.05
-    }
+    if not isinstance(transcript, str):
+        return None
 
-    transcript_lower = transcript.lower()
-    presence = {k: (1 if k in transcript_lower else 0) for k in features}
-    weighted_presence = {k: features[k] * presence[k] for k in features}
+    tokens = [word for word in word_tokenize(transcript.lower()) if word.isalpha()]
+    word_freq = nltk.FreqDist(tokens)
+    common_words = word_freq.most_common(10)
 
-    df = pd.DataFrame(list(weighted_presence.items()), columns=['Risk Factor', 'Score'])
-    df = df[df['Score'] > 0].sort_values(by='Score', ascending=False)
+    if not common_words:
+        return None
 
-    plt.figure(figsize=(10, 6))
-    sns.barplot(data=df, x='Score', y='Risk Factor', palette='Reds_r')
-    plt.title('Risk Factor Contribution to Danger Score')
-    st.pyplot(plt)
+    words, freqs = zip(*common_words)
 
+    fig, ax = plt.subplots(figsize=(8, 4))
+    ax.barh(words[::-1], freqs[::-1])
+    ax.set_title("🔍 Meest Voorkomende Woorden in Transcript")
+    ax.set_xlabel("Frequentie")
+    plt.tight_layout()
+    return fig

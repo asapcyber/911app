@@ -29,12 +29,13 @@ def sentiment_analysis(transcript: str):
 
 def plot_sentiment_chart(sentiment_df: pd.DataFrame):
     if sentiment_df is None or sentiment_df.empty:
-        return
+        return None
 
-    plt.figure(figsize=(10, 4))
-    plt.plot(sentiment_df.index, sentiment_df["Polarity"], marker="o")
-    plt.title("📈 Emotionele Polariteit per Zin")
-    plt.xlabel("Zin Index")
-    plt.ylabel("Polariteit (-1 tot 1)")
-    plt.grid(True)
+    fig, ax = plt.subplots(figsize=(10, 4))
+    ax.plot(sentiment_df.index, sentiment_df["Polarity"], marker="o", linestyle="-")
+    ax.set_title("📈 Emotionele Polariteit per Zin")
+    ax.set_xlabel("Zin Index")
+    ax.set_ylabel("Polariteit (-1 tot 1)")
+    ax.grid(True)
     plt.tight_layout()
+    return fig

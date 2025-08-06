@@ -33,15 +33,22 @@ with tabs[0]:
 with tabs[1]:
     if user_input:
         st.subheader("📈 Emotionele Analyse en Risicofactoren")
+
+        # --- Sentiment
         sentiment, emotion_df = sentiment_analysis(user_input)
-        plot_sentiment_chart(emotion_df)
-        st.pyplot()
+        fig1 = plot_sentiment_chart(emotion_df)
+        if fig1:
+            st.pyplot(fig1)
 
-        plot_risk_factors(user_input)
-        st.pyplot()
+        # --- Risk Factors
+        fig2 = plot_risk_factors(user_input)
+        if fig2:
+            st.pyplot(fig2)
 
+        # --- Data Table
         st.write("**Gedetecteerde emoties en sentimenten:**")
         st.dataframe(emotion_df)
+
 
 # --- Tab 3: Admin Panel
 with tabs[2]:
