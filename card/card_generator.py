@@ -1,8 +1,8 @@
 # card/card_generator.py
 
 from analysis.analyzer import run_sensitivity_analysis
-from model.scoring import score_transcript
 from analysis.sentiment_module import sentiment_analysis
+from model.scoring import score_transcript
 
 def generate_incident_card(transcript: str) -> str:
     score = score_transcript(transcript)
@@ -10,24 +10,27 @@ def generate_incident_card(transcript: str) -> str:
     sentiment_df, _ = sentiment_analysis(transcript)
 
     bullet_points = ""
-    for item in analysis:
-        bullet_points += f"<li>{item['Scenario']}: Δ {item['Δ Change']}</li>"
+    if analysis:
+        bullet_points = "".join(
+            f"<li>{item['Scenario']}: Δ {item['Δ Change']}</li>"
+            for item in analysis
+        )
 
-    sentiment_html = sentiment_df.to_html(index=False)
+    sentiment_table = ""
+    if not sentiment_df.empty:
+        sentiment_table = sentiment_df.to_html(index=False)
 
     html = f"""
-    <div style="border:2px solid #444;padding:20px;border-radius:10px;">
-        <h2>🧾 Incident Kaart</h2>
-        <p><strong>📍 Transcript samenvatting:</strong></p>
-        <p style="background-color:#f0f0f0;padding:10px;border-radius:5px;">{transcript}</p>
-
+    <div style="border:1px solid #ccc; padding:20px; border-radius:10px;">
+        <h3>📝 Incidentkaart</h3>
         <p><strong>🔥 Gevaar Score:</strong> {score:.2f} (0 = Laag, 1 = Hoog)</p>
 
         <p><strong>🧠 Gevoelige termen:</strong></p>
         <ul>{bullet_points}</ul>
 
         <p><strong>😊 Sentiment Analyse:</strong></p>
-        {sentiment_html}
+        {sentiment_table}
     </div>
     """
+
     return html
