@@ -9,6 +9,9 @@ from analysis.sentiment_module import sentiment_analysis, plot_sentiment_chart
 from analysis.visuals import plot_risk_factors
 from card.card_generator import generate_incident_card
 from model.training import retrain_model_from_db
+import nltk
+nltk.download('punkt')
+nltk.download('stopwords')
 
 st.set_page_config(page_title="112 Gevaarscore Analyser", layout="wide")
 
