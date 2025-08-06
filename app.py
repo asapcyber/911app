@@ -1,94 +1,66 @@
-# app.py
-
-import os
 import streamlit as st
 import requests
+
 from model.scoring import score_transcript
 from analysis.analyzer import run_sensitivity_analysis, plot_sensitivity_chart
 from analysis.sentiment_module import sentiment_analysis, plot_sentiment_chart
 from analysis.visuals import plot_risk_factors
 from card.card_generator import generate_incident_card
 from model.training import retrain_model_from_db
-import nltk
-# Force NLTK to use a writeable directory
-nltk_data_dir = os.path.join(os.getcwd(), "nltk_data")
-os.makedirs(nltk_data_dir, exist_ok=True)
 
-nltk.data.path.append(nltk_data_dir)
-nltk.download('punkt', download_dir=nltk_data_dir)
-nltk.download('stopwords', download_dir=nltk_data_dir)
+st.set_page_config(page_title="112 Incident Analyzer", layout="wide")
+st.title("112 Incident Analyzer 🇳🇱")
+st.markdown("Voer een transcript van een 112-melding in en analyseer de risico's, emoties en aanbevelingen.")
 
-st.set_page_config(page_title="112 Gevaarscore Analyser", layout="wide")
+# --- Input transcript field
+user_input = st.text_area("📋 Transcript invoeren (in het Nederlands)", height=300)
 
-st.title("🚨 112 Gevaarscore Analyser (NL)")
-st.markdown("""
-Deze applicatie analyseert meldingen bij de hulpdiensten (zoals 112) om het risico in te schatten,
-gevoeligheden te evalueren, en hulpdiensten te ondersteunen met inzichten en aanbevelingen.
-""")
+# --- Tabs setup
+tabs = st.tabs(["📑 Incidentkaart", "📊 Sentiment & Risicoanalyse", "🛠️ Beheer", "🤖 MCP Agent"])
 
-# --- Input
-user_input = st.text_area("📞 Voer hier de 112 transcriptie in:", height=250)
-
-# --- Tabs
-tab_labels = [
-    "📋 Incidentkaart",
-    "📊 Sentiment & Risico",
-    "🛠️ Admin Paneel",
-    "🧠 MCP Agent"
-]
-tabs = st.tabs(tab_labels)
-
-# --- TAB 1: Incidentkaart --- #
+# --- Tab 1: Incident Card
 with tabs[0]:
     if user_input:
+        st.subheader("🔍 Gevaarscore en Analyse")
         score = score_transcript(user_input)
-        st.markdown(f"### 🔥 Gevaarscore: `{score:.2f}` (0 = Laag risico, 1 = Hoog risico)`")
+        st.markdown(f"**Gevaar Score:** {score:.2f} (0 = Laag risico, 1 = Hoog risico)")
 
-        st.markdown("### 🧾 Incidentkaart")
-        html_card = generate_incident_card(user_input)
-        st.components.v1.html(html_card, height=800, scrolling=True)
-
-        st.markdown("### 📉 Gevoeligheidsanalyse")
         results = run_sensitivity_analysis(user_input)
-        if results:
-            plot_sensitivity_chart(results)
-        else:
-            st.info("Geen belangrijke termen gevonden voor gevoeligheidsanalyse.")
+        html_card = generate_incident_card(user_input)
+        st.markdown(html_card, unsafe_allow_html=True)
 
-# --- TAB 2: Sentiment & Risico Analyse --- #
+# --- Tab 2: Sentiment & Risk
 with tabs[1]:
     if user_input:
-        sentiment_df, emotion_df = sentiment_analysis(user_input)
-
-        st.markdown("### 😐 Sentimentanalyse per regel")
-        st.dataframe(sentiment_df)
+        st.subheader("📈 Emotionele Analyse en Risicofactoren")
+        sentiment, emotion_df = sentiment_analysis(user_input)
         plot_sentiment_chart(emotion_df)
+        st.pyplot()
 
-        st.markdown("### ⚠️ Risicofactoren (model-gedreven)")
         plot_risk_factors(user_input)
+        st.pyplot()
 
-# --- TAB 3: Admin Panel (Model Retraining) --- #
+        st.write("**Gedetecteerde emoties en sentimenten:**")
+        st.dataframe(emotion_df)
+
+# --- Tab 3: Admin Panel
 with tabs[2]:
-    st.markdown("### 🔄 Model Hertrainen met nieuwe database")
-    st.info("Gebruik deze knop om het gevaarscore-model opnieuw te trainen op basis van alle gegevens in de database.")
-
-    if st.button("Hertrain model"):
+    st.subheader("🔄 Model opnieuw trainen")
+    st.markdown("Klik op de onderstaande knop om het ML-model opnieuw te trainen op basis van de laatste gegevens in de database.")
+    if st.button("📚 Start Hertraining"):
         retrain_model_from_db()
-        st.success("Model is succesvol hertraind en opgeslagen als danger_score_model.pkl.")
+        st.success("✅ Model opnieuw getraind en opgeslagen!")
 
-# --- TAB 4: MCP Agent (OpenAI Assistant) --- #
+# --- Tab 4: MCP Agent
 with tabs[3]:
-    st.markdown("### 🧠 MCP Agent – Vraag advies over het incident")
-    mcp_query = st.text_input("Vraag van dispatcher of hulpverlener", placeholder="Bijv. De melder is gevlucht – wat nu?")
+    st.subheader("💬 Vraag de MCP Agent")
+    mcp_query = st.text_input("Stel een vraag op basis van het incident", placeholder="Bijv. De melder is gevlucht — wat nu?")
     if mcp_query and user_input:
         try:
             response = requests.post("http://localhost:8000/query", json={
                 "query": mcp_query,
                 "context": user_input
             })
-            if response.status_code == 200:
-                st.markdown(f"**🧠 Antwoord van de AI Agent:** {response.json()['response']}")
-            else:
-                st.error(f"Fout bij ophalen van AI antwoord: {response.text}")
+            st.markdown(f"**🧠 Antwoord van de MCP Agent:** {response.json()['response']}")
         except Exception as e:
-            st.error(f"Kon geen verbinding maken met MCP Agent. Draait deze lokaal? Foutmelding: {e}")
+            st.error(f"Verbinding met MCP Agent mislukt. Draait de server lokaal? Foutmelding: {e}")
