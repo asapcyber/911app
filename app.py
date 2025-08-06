@@ -34,6 +34,7 @@ with tabs[0]:
         # 2. Sensitivity
         st.subheader("🔍 Gevoeligheidsanalyse")
         results = run_sensitivity_analysis(user_input)
+        st.write("DEBUG: Sensitivity Results", results)
         plot_sensitivity_chart(results)
 
 # --- TAB 2: MCP Agent Interface ---
