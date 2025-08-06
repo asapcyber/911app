@@ -1,5 +1,3 @@
-# analysis/analyzer.py
-
 import matplotlib.pyplot as plt
 import seaborn as sns
 import pandas as pd
@@ -8,54 +6,41 @@ from model.scoring import score_transcript
 import nltk
 from nltk.corpus import stopwords
 from nltk.tokenize import word_tokenize
-from nltk import pos_tag
 import logging
-import os
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Force NLTK to use a writeable directory
+# NLTK resource handling (safe for Streamlit Cloud)
+import os
 nltk_data_dir = os.path.join(os.getcwd(), "nltk_data")
 os.makedirs(nltk_data_dir, exist_ok=True)
-
 nltk.data.path.append(nltk_data_dir)
 nltk.download('punkt', download_dir=nltk_data_dir)
-nltk.download('averaged_perceptron_tagger', download_dir=nltk_data_dir)
 nltk.download('stopwords', download_dir=nltk_data_dir)
 
+DUTCH_STOP_WORDS = stopwords.words('dutch')
 
-
-DUTCH_STOP_WORDS = set(stopwords.words('dutch'))
-
-# --- Extract Dutch keywords dynamically with filtering --- #
-def extract_dutch_keywords(transcript: str, top_n=10):
-    logger.info("Extracting keywords from transcript...")
-
-    tokens = word_tokenize(transcript.lower())
-    filtered_tokens = [t for t in tokens if t.isalpha() and t not in DUTCH_STOP_WORDS]
-
-    # Use POS tag filtering: keep nouns, verbs, adjectives (manually mapped, since NLTK POS tagging is English-based)
-    tagged = pos_tag(filtered_tokens, lang='eng')  # Approximate tagging
-    logger.info(f"POS Tagged tokens: {tagged}")
-
-    keywords = [word for word, tag in tagged if tag.startswith('N') or tag.startswith('V') or tag.startswith('J')]
-    keywords = list(set(keywords))  # Deduplicate
-
-    if not keywords:
-        # Fallback to TF-IDF if POS fails
-        logger.warning("No relevant POS keywords found, falling back to TF-IDF.")
-        vectorizer = TfidfVectorizer(stop_words=list(DUTCH_STOP_WORDS))
-        X = vectorizer.fit_transform([transcript])
+# --- Extract Dutch keywords dynamically --- #
+def extract_dutch_keywords(transcript, top_n=10):
+    try:
+        tokens = word_tokenize(transcript.lower())  # Avoid language='dutch'
+        cleaned_text = " ".join([
+            t for t in tokens if t.isalpha() and t not in DUTCH_STOP_WORDS
+        ])
+        vectorizer = TfidfVectorizer()
+        X = vectorizer.fit_transform([cleaned_text])
         scores = zip(vectorizer.get_feature_names_out(), X.toarray()[0])
         sorted_keywords = sorted(scores, key=lambda x: x[1], reverse=True)
         keywords = [kw for kw, _ in sorted_keywords[:top_n]]
+        logger.info(f"Extracted Dutch keywords: {keywords}")
+        return keywords
+    except Exception as e:
+        logger.error(f"Keyword extraction failed: {e}")
+        return []
 
-    logger.info(f"Selected keywords for sensitivity: {keywords}")
-    return keywords[:top_n]
-
-# --- Run sensitivity by removing key Dutch terms --- #
+# --- Run sensitivity by perturbing key Dutch terms --- #
 def run_sensitivity_analysis(transcript: str):
     base_score = score_transcript(transcript)
     keywords = extract_dutch_keywords(transcript)
