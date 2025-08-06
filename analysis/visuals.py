@@ -2,6 +2,12 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 import streamlit as st
+import matplotlib.pyplot as plt
+import nltk
+from nltk.tokenize import word_tokenize
+
+# Make sure stopwords are also downloaded if you need them elsewhere
+nltk.download('punkt')
 
 def plot_risk_factors(transcript: str):
     if not isinstance(transcript, str):
