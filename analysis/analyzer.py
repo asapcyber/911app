@@ -1,89 +1,112 @@
 # analysis/analyzer.py
 
+import re
 import matplotlib.pyplot as plt
 import seaborn as sns
 import pandas as pd
 import nltk
 from nltk.corpus import stopwords
 from nltk.tokenize import word_tokenize
-from sklearn.feature_extraction.text import TfidfVectorizer
-
 from model.scoring import score_transcript
-from model.db import SessionLocal
-from model.models import CallRecord
 
-# Ensure NLTK components are downloaded
-nltk.download('stopwords')
-nltk.download('punkt')
+# Ensure NLTK data exists
+nltk.download('punkt', quiet=True)
+nltk.download('stopwords', quiet=True)
 
-DUTCH_STOP_WORDS = stopwords.words('dutch')
+DUTCH_STOP_WORDS = set(stopwords.words('dutch'))
 
-# --- Extract Dutch keywords dynamically using TF-IDF trained on DB corpus --- #
-def extract_dutch_keywords(transcript: str, top_n: int = 10):
-    print("[TF-IDF] Extracting Dutch keywords based on full corpus...")
-    db = SessionLocal()
-    records = db.query(CallRecord).all()
-    db.close()
+# Fallback danger lexicon (ensures we test these even if TF/keywords are weak)
+DANGER_LEXICON = [
+    "mes", "bijl", "pistool", "wapen", "schoten", "schieten",
+    "snijdt", "snijden", "bloed", "bloedend", "bedreigt", "bedreigen",
+    "vermorden", "vermoorden", "brand", "aansteken", "steken",
+    "zelfmoord", "zichzelf pijn", "zichzelf snijden", "springt", "springen"
+]
 
-    corpus = [r.transcript for r in records if r.transcript and isinstance(r.transcript, str)]
-    corpus.append(transcript)
+def _clean_tokens(text: str):
+    tokens = word_tokenize(text.lower())
+    return [t for t in tokens if t.isalpha() and t not in DUTCH_STOP_WORDS]
 
-    vectorizer = TfidfVectorizer(stop_words=DUTCH_STOP_WORDS)
-    X = vectorizer.fit_transform(corpus)
+def _candidate_bigrams(tokens, max_n=15):
+    # Build bigrams from cleaned tokens (skip stopwords already removed)
+    bigrams = []
+    for i in range(len(tokens) - 1):
+        bigrams.append(f"{tokens[i]} {tokens[i+1]}")
+    # Keep unique order-preserving
+    seen = set()
+    out = []
+    for bg in bigrams:
+        if bg not in seen:
+            seen.add(bg)
+            out.append(bg)
+    return out[:max_n]
 
-    # Use the last (current) document
-    current_vector = X[-1].toarray()[0]
-    feature_names = vectorizer.get_feature_names_out()
-    scores = zip(feature_names, current_vector)
+def _regex_remove(text: str, term: str) -> str:
+    """
+    Remove a unigram or bigram term from text using case-insensitive
+    word-boundary regex so model inputs actually change.
+    """
+    # For bigrams use spaces; for unigrams use \b term \b
+    if " " in term:
+        pattern = re.compile(rf"(?i)\b{re.escape(term)}\b")
+    else:
+        pattern = re.compile(rf"(?i)\b{re.escape(term)}\b")
+    return re.sub(pattern, " ", text)
 
-    sorted_keywords = sorted(scores, key=lambda x: x[1], reverse=True)
-    top_keywords = [kw for kw, score in sorted_keywords[:top_n] if kw.strip()]
-    
-    print(f"[TF-IDF] Top {top_n} keywords: {top_keywords}")
-    return top_keywords
+def run_sensitivity_analysis(transcript: str, top_n: int = 10, min_impact: float = 0.0001):
+    """
+    Impact-based sensitivity:
+    - Build candidate terms (unigrams + bigrams) from the transcript
+    - Add curated danger lexicon candidates if present in transcript
+    - Remove each term and measure Δ score
+    - Return top-N by absolute impact (4 decimals kept)
+    """
+    base = score_transcript(transcript)
 
-# --- Sensitivity Analysis by perturbing high-weight keywords --- #
-def run_sensitivity_analysis(transcript: str):
-    base_score = score_transcript(transcript)
-    print(f"[Sensitiviteit] Basis score: {base_score}")
-
-    keywords = extract_dutch_keywords(transcript)
-    if not keywords:
-        print("[Sensitiviteit] Geen gevoelige termen gevonden.")
+    tokens = _clean_tokens(transcript)
+    if not tokens:
         return []
 
+    # candidates from transcript (unigrams + bigrams actually present)
+    unigram_candidates = list(dict.fromkeys(tokens))  # unique, order-preserving
+    bigram_candidates = [bg for bg in _candidate_bigrams(tokens) if bg in transcript.lower()]
+    candidates = unigram_candidates + bigram_candidates
+
+    # add danger lexicon terms that actually appear in transcript
+    lower_txt = transcript.lower()
+    for lex in DANGER_LEXICON:
+        if lex in lower_txt and lex not in candidates:
+            candidates.append(lex)
+
+    # Evaluate impact
     results = []
-    for word in keywords:
-        modified_transcript = transcript.replace(word, "")
-        new_score = score_transcript(modified_transcript)
-        delta = round(new_score - base_score, 2)
+    for term in candidates:
+        modified = _regex_remove(transcript, term)
+        new_score = score_transcript(modified)
+        delta = float(new_score - base)  # keep full precision
+        if abs(delta) >= min_impact:
+            results.append({
+                "Term": term,
+                "Δ Change": round(delta, 4),
+                "Color": "red" if delta < 0 else "green"
+            })
 
-        results.append({
-            "Scenario": f"Verwijder '{word}'",
-            "Δ Change": delta,
-            "Color": "red" if delta < 0 else "green"
-        })
+    # Sort by absolute impact, top-N
+    results.sort(key=lambda r: abs(r["Δ Change"]), reverse=True)
+    return results[:top_n]
 
-        print(f"[Sensitiviteit] '{word}' verwijderd → Δ {delta}")
-
-    return results
-
-# --- Plot the sensitivity chart --- #
 def plot_sensitivity_chart(results):
     if not results:
-        print("[Visualisatie] Geen resultaten voor gevoeligheidsanalyse.")
         return None
-
     df = pd.DataFrame(results)
 
     plt.figure(figsize=(10, 6))
-    sns.barplot(data=df, x='Δ Change', y='Scenario', hue='Color', dodge=False,
+    sns.barplot(data=df, x='Δ Change', y='Term', hue='Color', dodge=False,
                 palette={"red": "red", "green": "green"})
-    plt.axvline(0, color='gray', linestyle='--')
-    plt.title('Gevoeligheidsanalyse: Impact van Termen op Gevaarscore')
-    plt.xlabel('Verandering in Score')
-    plt.ylabel('Scenario')
-    plt.legend(title='Impact')
+    plt.axvline(0, color='gray', linestyle='--', linewidth=0.8)
+    plt.title('Gevoeligheidsanalyse: Impact van termen op gevaarscore')
+    plt.xlabel('Verandering in gevaarscore (Δ)')
+    plt.ylabel('Term')
+    plt.legend(title='Effect')
     plt.tight_layout()
-    print("[Visualisatie] Gevoeligheidsgrafiek gegenereerd.")
     return plt.gcf()
