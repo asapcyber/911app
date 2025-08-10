@@ -104,7 +104,7 @@ def run_sensitivity_analysis(transcript: str, top_n: int = 10, min_impact: float
             results.append({
                 "Term": term,
                 "Δ Change": round(delta, 4),
-                "Color": "red" if delta < 0 else "green"
+                "Color": "green" if delta < 0 else "red"
             })
 
     # Sort by absolute impact
