@@ -16,6 +16,7 @@ In order to fully develop the app a more robust tech stack will need to be lever
 - SQLite
 - Python
 - Vite/Tailwind
+- React UI
 - Streamlit Cloud for prototype
 - Custom MCP Server for OpenAI
 
