@@ -60,6 +60,8 @@ except Exception as e:
 # =============================================================================
 # FastAPI app
 # =============================================================================
+app = FastAPI(title="112 Analyzer API", version="2.0.0")
+
 FRONTEND_ORIGIN = os.getenv("FRONTEND_ORIGIN", "*")
 app.add_middleware(
     CORSMiddleware,
@@ -70,7 +72,7 @@ app.add_middleware(
 )
 
 
-app = FastAPI(title="112 Analyzer API", version="2.0.0")
+
 
 app.add_middleware(
     CORSMiddleware,
