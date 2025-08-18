@@ -1,5 +1,4 @@
 # server/main.py
-# server/main.py
 from __future__ import annotations
 
 import os
@@ -14,6 +13,13 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Body
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
+
+import nltk
+NLTK_DIR = os.getenv("NLTK_DATA", os.path.join(os.path.dirname(__file__), ".nltk_data"))
+if NLTK_DIR not in nltk.data.path:
+    nltk.data.path.append(NLTK_DIR)
+
+
 
 # ---- Load env early ----
 load_dotenv()
