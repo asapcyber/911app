@@ -1,19 +1,28 @@
-streamlit
-pandas
-scikit-learn
-joblib
-matplotlib
-seaborn
-nltk
-textblob
-pdfkit
-openai
-langchain
-fastapi
-uvicorn
-requests
-sqlalchemy
-collections
-typing
-dotenv
-pydantic
+# --- Frontend/streamlit (if still using it) ---
+streamlit==1.37.1
+
+# --- Data / ML ---
+pandas==2.2.2
+scikit-learn==1.5.2
+joblib==1.4.2
+matplotlib==3.9.2
+seaborn==0.13.2
+
+# --- NLP ---
+nltk==3.9.1
+textblob==0.18.0.post0
+
+# --- PDF ---
+pdfkit==1.0.0
+
+# --- OpenAI + LangChain ---
+openai==1.40.3
+langchain==0.2.14
+
+# --- FastAPI stack ---
+fastapi==0.115.2
+uvicorn[standard]==0.34.0
+requests==2.32.3
+SQLAlchemy==2.0.41
+pydantic==2.9.2
+python-dotenv==1.0.1
