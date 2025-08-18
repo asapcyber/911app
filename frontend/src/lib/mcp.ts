@@ -1,5 +1,9 @@
+const API_BASE = import.meta.env.VITE_API_BASE ?? '';
+const MCP_BASE = import.meta.env.VITE_MCP_BASE ?? API_BASE;
+
+
 export async function askMCP(session_id: string, query: string, context: string) {
-  const res = await fetch('/mcp/query', {
+  const res = await fetch(`${MCP_BASE}/mcp/query`, {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({ session_id, query, context }),

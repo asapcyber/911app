@@ -2,9 +2,10 @@ type ScoreResp = { score: number }
 type SensResp  = { results: { Term: string; delta?: number; ["Δ Change"]?: number }[] }
 
 const MOCK = import.meta.env.VITE_MOCK === '1';
+const API_BASE = import.meta.env.VITE_API_BASE ?? '';
 
-export async function postJSON<T>(url: string, body: unknown, init?: RequestInit): Promise<T> {
-  const res = await fetch(url, {
+export async function postJSON<T>(path: string, body: unknown, init?: RequestInit): Promise<T> {
+  const res = await fetch(`${API_BASE}${path}`, {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify(body),
