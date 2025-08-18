@@ -21,3 +21,6 @@ openai==1.40.3
 
 # add this line (or adjust if already present)
 httpx==0.27.2
+# Analysis deps
+matplotlib
+seaborn
