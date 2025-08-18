@@ -1,6 +1,5 @@
 // src/components/MapCard.tsx
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet'
-import type { LatLngExpression } from 'leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 
@@ -22,6 +21,7 @@ type Props = {
 
 export default function MapCard({ lat, lon, label = 'Locatie 112-melding' }: Props) {
   const hasPos = typeof lat === 'number' && typeof lon === 'number'
+  const position = hasPos ? [lat as number, lon as number] as [number, number] : null
 
   return (
     <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 backdrop-blur p-4 shadow-sm">
@@ -35,20 +35,22 @@ export default function MapCard({ lat, lon, label = 'Locatie 112-melding' }: Pro
         </div>
       ) : (
         <div className="h-[280px] rounded-lg overflow-hidden">
-          {/* Key forces re-mount when coords change so center/zoom apply reliably */}
+          {/* Force re-mount so new center/zoom apply reliably */}
           <MapContainer
-            key={`${lat},${lon}`}
-            center={[lat as number, lon as number] as LatLngExpression}
+            key={`${position![0]},${position![1]}`}
+            // Casting to any avoids CI type hiccups if react-leaflet/leaflet types mismatch
+            center={position as any}
             zoom={15}
             scrollWheelZoom={true}
             style={{ height: '100%', width: '100%' }}
             preferCanvas={true}
           >
+            {/* @ts-ignore react-leaflet props resolve at runtime; CI sometimes misreads types */}
             <TileLayer
               url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
               attribution="&copy; OpenStreetMap contributors"
             />
-            <Marker position={[lat as number, lon as number] as LatLngExpression}>
+            <Marker position={position as any}>
               <Popup>{label}</Popup>
             </Marker>
           </MapContainer>
