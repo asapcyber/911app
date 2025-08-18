@@ -1,6 +1,7 @@
 # server/main.py
 from __future__ import annotations
 
+# --- Make sure local packages are importable ---------------------------------
 import os
 import sys
 
@@ -8,35 +9,38 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 if BASE_DIR not in sys.path:
     sys.path.insert(0, BASE_DIR)
 
+# --- Stdlib / typing / utils -------------------------------------------------
 import time
 import json
 import asyncio
 import logging
+import re
 from collections import defaultdict, deque
-from typing import Deque, Tuple, List, Dict, Any
+from typing import Deque, Tuple, List, Dict, Any, Optional
 
+# --- Third-party / framework -------------------------------------------------
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, Body
+from fastapi import FastAPI, HTTPException, Body, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
+# --- NLTK data path (works on Render) ---------------------------------------
 import nltk
 NLTK_DIR = os.getenv("NLTK_DATA", os.path.join(os.path.dirname(__file__), ".nltk_data"))
 if NLTK_DIR not in nltk.data.path:
     nltk.data.path.append(NLTK_DIR)
 
-
-
 # ---- Load env early ----
 load_dotenv()
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4.1")  # Responses-capable model (e.g., gpt-4.1, gpt-4o-mini)
+OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")  # safe default for Responses/Chat
+FRONTEND_ORIGIN = os.getenv("FRONTEND_ORIGIN", "*")
 
 # ---- Logging ----
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("server.main")
 
-# ---- Third-party clients ----
+# ---- OpenAI client (SDK 1.x) -----------------------------------------------
 try:
     from openai import OpenAI
 except Exception as e:
@@ -45,30 +49,31 @@ except Exception as e:
 
 client = OpenAI(api_key=OPENAI_API_KEY) if (OpenAI and OPENAI_API_KEY) else None
 
-# ---- Local ML imports ----
-# These should exist in your repo:
-#   model/scoring.py  -> score_transcript(text) -> float in [0,1]
-#   analysis/analyzer.py -> run_sensitivity_analysis(text, top_n=10) -> list of dicts ({Term, delta, ...})
+# ---- Local ML imports -------------------------------------------------------
+# model/scoring.py: def score_transcript(text:str) -> float in [0,1]
 try:
     from model.scoring import score_transcript
 except Exception as e:
     logger.exception("Failed to import model.scoring.score_transcript: %s", e)
-    def score_transcript(text: str) -> float:
+
+    def score_transcript(text: str) -> float:  # type: ignore[no-redef]
         raise RuntimeError("score_transcript import failed; check server logs.")
 
+# analysis/analyzer.py: def run_sensitivity_analysis(text:str, top_n:int=10) -> List[Dict]
 try:
     from analysis.analyzer import run_sensitivity_analysis
 except Exception as e:
     logger.exception("Failed to import analysis.analyzer.run_sensitivity_analysis: %s", e)
-    def run_sensitivity_analysis(text: str, top_n: int = 10) -> List[Dict[str, Any]]:
+
+    def run_sensitivity_analysis(text: str, top_n: int = 10) -> List[Dict[str, Any]]:  # type: ignore[no-redef]
         raise RuntimeError("run_sensitivity_analysis import failed; check server logs.")
 
 # =============================================================================
 # FastAPI app
 # =============================================================================
-app = FastAPI(title="112 Analyzer API", version="2.0.0")
+app = FastAPI(title="112 Analyzer API", version="2.1.0")
 
-FRONTEND_ORIGIN = os.getenv("FRONTEND_ORIGIN", "*")
+# Single CORS block (avoid duplicates)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[FRONTEND_ORIGIN] if FRONTEND_ORIGIN != "*" else ["*"],
@@ -77,20 +82,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
-
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-        "*",
-    ],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# Optional request timing logs (handy on Render)
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    t0 = time.perf_counter()
+    resp = await call_next(request)
+    ms = (time.perf_counter() - t0) * 1000
+    logger.info("%s %s -> %s (%.1f ms)", request.method, request.url.path, resp.status_code, ms)
+    return resp
 
 # =============================================================================
 # Schemas
@@ -121,7 +120,12 @@ class AnalyzeResponse(BaseModel):
 # =============================================================================
 @app.get("/health")
 def health():
-    return {"status": "ok", "model_loaded": bool(client), "ml_imports_ok": score_transcript is not None}
+    return {
+        "status": "ok",
+        "openai_client": bool(client),
+        "model": OPENAI_MODEL,
+        "ml_imports_ok": score_transcript is not None,
+    }
 
 # =============================================================================
 # ML endpoints
@@ -145,8 +149,7 @@ async def api_sensitivity(req: SensitivityRequest):
     try:
         top = min(req.top_n, 20)
         rows = await asyncio.to_thread(run_sensitivity_analysis, req.transcript, top)
-        # Normalize keys for the frontend
-        out = []
+        out: List[Dict[str, Any]] = []
         for r in rows or []:
             term = r.get("Term") or r.get("term") or r.get("Scenario") or ""
             delta = r.get("Δ Change", r.get("delta", 0.0))
@@ -175,8 +178,7 @@ async def api_analyze(req: AnalyzeRequest):
         s = max(0.0, min(1.0, float(s)))
         top = min(req.top_n, 20)
         rows = await asyncio.to_thread(run_sensitivity_analysis, req.transcript, top)
-        # normalize result terms
-        norm = []
+        norm: List[Dict[str, Any]] = []
         for r in rows or []:
             term = r.get("Term") or r.get("term") or r.get("Scenario") or ""
             delta = r.get("Δ Change", r.get("delta", 0.0))
@@ -192,11 +194,9 @@ async def api_analyze(req: AnalyzeRequest):
     finally:
         logger.info("/api/analyze completed in %.1f ms", (time.perf_counter() - t0) * 1000)
 
-# --- Sentiment & Recommendations (Nederlands) -------------------------------
-import re
-from typing import Dict, List
-from fastapi import HTTPException
-
+# =============================================================================
+# Sentiment & Recommendations (Nederlands)
+# =============================================================================
 class SentimentRequest(BaseModel):
     transcript: str = Field(..., min_length=3)
 
@@ -206,7 +206,7 @@ class SentimentResponse(BaseModel):
 EMO_LEX = {
     "angst": ["bang", "angstig", "vrees", "paniek", "gevaar", "ik moet vluchten", "help", "hulp"],
     "boosheid": ["boos", "woedend", "schreeuwt", "bedreigt", "agressief", "aanvalt", "geweld"],
-    "verdriet": ["huilen", "verdriet", "pijn", "gewond", "gewond", "gewond geraakt"],
+    "verdriet": ["huilen", "verdriet", "pijn", "gewond", "gewond geraakt"],
     "urgentie": ["nu", "meteen", "dringend", "spoed", "snel", "direct"],
     "wanhoop": ["ik kan niet", "het gaat mis", "red me", "wanhopig", "ik ben bang", "ik moet weg"],
 }
@@ -215,14 +215,13 @@ def _score_emotions_nl(text: str) -> Dict[str, float]:
     t = text.lower()
     out: Dict[str, float] = {}
     total_hits = 0
-    raw = {}
+    raw: Dict[str, int] = {}
     for emo, terms in EMO_LEX.items():
         c = 0
         for kw in terms:
             c += len(re.findall(r"\b" + re.escape(kw) + r"\b", t))
         raw[emo] = c
         total_hits += c
-    # normaliseer tot 0..1 (robust)
     denom = max(1, total_hits)
     for emo, c in raw.items():
         out[emo] = round(c / denom, 4)
@@ -252,7 +251,7 @@ def _recommend_actions(text: str, score: float) -> List[str]:
     has_weapon = any(w in t for w in WEAPON_TERMS)
     self_harm = any(s in t for s in SELF_HARM_TERMS)
     high = score >= 0.7
-    med  = 0.4 <= score < 0.7
+    med = 0.4 <= score < 0.7
 
     actions: List[str] = []
     # Altijd:
@@ -265,18 +264,17 @@ def _recommend_actions(text: str, score: float) -> List[str]:
         actions.append("Plan de-escalatie met twee-eenheden-benadering; ambulance op afroep.")
     else:
         actions.append("Voer rustige de-escalatie; monitor laagschalig maar alert.")
-
-    # Wapen aanwezig
+    # Wapen aanwezig:
     if has_weapon:
         actions.append("Wapenprotocol: geen plotselinge bewegingen; Taser/pepperspray conform richtlijnen gereed.")
         actions.append("Vermijd binnentreden zonder overzicht; gebruik beschutting en licht/geluid aan/uit beleid.")
-    # Zelfbeschadiging
+    # Zelfbeschadiging:
     if self_harm:
         actions.append("Schakel crisisdienst/psycholance; focus op verbale de-escalatie en veiligheidsafspraken.")
         actions.append("Verwijder scherpe voorwerpen uit bereik zodra veilig mogelijk.")
-    # Check derden
+    # Derden:
     actions.append("Verifieer aanwezigheid van derden (kinderen/omstanders) en evacueer zo nodig.")
-    # Info
+    # Info:
     actions.append("Vraag: middelengebruik, eerdere incidenten, medische/psychiatrische voorgeschiedenis, beschermingsmaatregelen.")
     return actions
 
@@ -289,12 +287,9 @@ async def api_recommend(req: RecommendRequest):
         logger.exception("/api/recommend failed: %s", e)
         raise HTTPException(status_code=500, detail=f"recommend failed: {e}")
 
-
-
 # =============================================================================
-# MCP Agent (Responses API only, with session memory)
+# MCP Agent (OpenAI compat: Responses first, then Chat Completions)
 # =============================================================================
-# Lightweight in-memory chat store: session_id -> last 20 messages (role, text)
 CHAT_SESSIONS: dict[str, Deque[Tuple[str, str]]] = defaultdict(lambda: deque(maxlen=20))
 
 class MCPChatQuery(BaseModel):
@@ -314,10 +309,6 @@ SYSTEM_DUTCH = (
 )
 
 def _prompt_with_history(session_id: str, q: str, ctx: str) -> List[Dict[str, str]]:
-    """
-    Build a Responses-API style 'input' list with roles.
-    We keep a system message and then a single user content that includes short history + context + question.
-    """
     hist = CHAT_SESSIONS.get(session_id, deque())
     lines = []
     for role, msg in hist:
@@ -337,88 +328,103 @@ def _prompt_with_history(session_id: str, q: str, ctx: str) -> List[Dict[str, st
         {"role": "user", "content": user_payload},
     ]
 
-def _extract_responses_text(resp) -> str:
-    """
-    Robustly extract plain text from Responses API object across SDK/model variations.
-    """
-    # Preferred helper in newer SDKs
-    text = (getattr(resp, "output_text", "") or "").strip()
+def _extract_from_responses_api(result) -> Optional[str]:
+    # Try convenience property
+    text = getattr(result, "output_text", None)
     if text:
-        return text
+        return text.strip()
 
-    # Fallback: walk structured 'output'
-    out = getattr(resp, "output", None)
+    # Walk 'output' list
+    out = getattr(result, "output", None)
     if out:
         chunks = []
         for item in out:
-            content_list = getattr(item, "content", None) or []
-            for c in content_list:
-                # c may be an object or a dict depending on SDK
-                ctype = getattr(c, "type", None) or (isinstance(c, dict) and c.get("type"))
-                if ctype in ("text", "output_text"):
-                    ctext = getattr(c, "text", None) or (isinstance(c, dict) and c.get("text")) or ""
-                    if ctext:
-                        chunks.append(ctext)
+            content = getattr(item, "content", None) or []
+            for seg in content:
+                typ = getattr(seg, "type", None) or (isinstance(seg, dict) and seg.get("type"))
+                if typ in ("text", "output_text"):
+                    t = getattr(seg, "text", None) or (isinstance(seg, dict) and seg.get("text"))
+                    if t:
+                        chunks.append(t)
         if chunks:
             return "\n".join(chunks).strip()
 
-    # Another fallback (some SDKs): top-level 'content'
-    top = getattr(resp, "content", None)
+    # Some SDKs expose top-level 'content'
+    top = getattr(result, "content", None)
     if isinstance(top, list):
         parts = []
-        for c in top:
-            if isinstance(c, dict) and c.get("type") in ("text", "output_text") and c.get("text"):
-                parts.append(c["text"])
+        for seg in top:
+            if isinstance(seg, dict) and seg.get("type") in ("text", "output_text") and seg.get("text"):
+                parts.append(seg["text"])
         if parts:
             return "\n".join(parts).strip()
 
-    return ""
+    return None
+
+def _call_openai_with_compat(client, model: str, system_prompt: str, user_prompt: str, max_out_tokens: int = 600) -> str:
+    """
+    Try Responses API first (if present), then fall back to Chat Completions.
+    Use only widely-supported params.
+    """
+    # 1) Responses API (newer)
+    if hasattr(client, "responses"):
+        try:
+            resp = client.responses.create(
+                model=model,
+                input=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user",   "content": user_prompt},
+                ],
+                # For Responses API the modern param is max_output_tokens or max_completion_tokens
+                max_output_tokens=max_out_tokens,
+            )
+            text = _extract_from_responses_api(resp) or ""
+            if text.strip():
+                return text.strip()
+            logger.warning("Responses API returned empty text; falling back to chat.completions.")
+        except Exception as e:
+            logger.warning("Responses API failed; falling back to chat.completions: %s", e)
+
+    # 2) Chat Completions (classic)
+    resp = client.chat.completions.create(
+        model=model,
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user",   "content": user_prompt},
+        ],
+        max_tokens=max_out_tokens,
+    )
+    text = (resp.choices[0].message.content or "").strip()
+    return text
 
 @app.post("/mcp/query", response_model=MCPAnswer)
 async def mcp_query(payload: MCPChatQuery = Body(...)):
     if not client or not OPENAI_API_KEY:
         raise HTTPException(status_code=500, detail="OPENAI_API_KEY ontbreekt op de server.")
 
-    # Build Responses-API input (role-based) with compact history
+    # Build prompts with compact history
     input_messages = _prompt_with_history(payload.session_id, payload.query, payload.context)
+    system_prompt = input_messages[0]["content"]
+    user_prompt   = input_messages[1]["content"]
 
     t0 = time.perf_counter()
     try:
-        def _call():
-            # Responses API — no `response_format` in your SDK version
-            return client.with_options(timeout=20).responses.create(
-                model=OPENAI_MODEL,
-                input=input_messages,      # role/content list
-                max_output_tokens=400,     # correct param for Responses API
-            )
-        resp = await asyncio.to_thread(_call)
-
-        # Light introspection for debugging shapes
-        try:
-            logger.info("MCP Responses model: %s", getattr(resp, "model", None))
-            if hasattr(resp, "__dict__"):
-                logger.info("MCP Responses keys: %s", list(resp.__dict__.keys()))
-        except Exception:
-            pass
-
-        text = _extract_responses_text(resp)
-        if not text:
-            # Log a truncated JSON dump if available
-            try:
-                raw_json = getattr(resp, "model_dump_json", None)
-                if callable(raw_json):
-                    dumped = raw_json()
-                    logger.warning("MCP empty text; raw json (truncated): %s", dumped[:1500])
-            except Exception:
-                logger.warning("MCP empty text; resp type=%s", type(resp))
+        answer = await asyncio.to_thread(
+            _call_openai_with_compat,
+            client,
+            OPENAI_MODEL,
+            system_prompt,
+            user_prompt,
+            600,
+        )
+        if not answer:
             raise HTTPException(status_code=502, detail="MCP agent: leeg antwoord ontvangen van de model-API.")
 
         # Update session history
         CHAT_SESSIONS[payload.session_id].append(("user", payload.query))
-        CHAT_SESSIONS[payload.session_id].append(("assistant", text))
+        CHAT_SESSIONS[payload.session_id].append(("assistant", answer))
 
-        return {"response": text}
-
+        return {"response": answer}
     except HTTPException:
         raise
     except Exception as e:
