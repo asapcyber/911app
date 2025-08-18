@@ -31,7 +31,7 @@ export default function App() {
       alt="112 Analyzer"
       className="h-10 w-30"
     />
-    <div className="text-3xl text-blue-950 font-bold tracking-wide">
+    <div className="text-3xl text-blue-800 font-bold tracking-wide">
       112 Analyzer
     </div>
     <nav className="ml-auto flex items-center gap-2">
