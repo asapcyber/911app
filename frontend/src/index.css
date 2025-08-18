@@ -3,3 +3,10 @@
 @tailwind utilities;
 
 html, body, #root { height: 100%; }
+
+header, footer {
+  /*font-family: 'Roboto Condensed', Arial, sans-serif;*/
+  color: #003082; /* Politie blue */
+  background-color: white; /* keep background white */
+  font-weight: 600;
+}

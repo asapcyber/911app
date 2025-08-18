@@ -1,0 +1,5 @@
+fastapi==0.115.12
+uvicorn[standard]==0.34.3
+pydantic==2.8.2
+openai>=1.60.0
+OPENAI_API_KEY=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
