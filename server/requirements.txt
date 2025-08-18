@@ -13,11 +13,6 @@ fastapi
 uvicorn
 requests
 sqlalchemy
-os
-time
-json
-asyncio
-logging
 collections
 typing
 dotenv
