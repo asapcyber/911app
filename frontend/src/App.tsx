@@ -3,22 +3,22 @@ import { NavLink, Route, Routes, Navigate } from 'react-router-dom'
 import TranscriptPage from './routes/TranscriptPage'
 import McpAgentPage from './routes/McpAgentPage'
 
-function NavItem({ to, label }: { to: string; label: string }) {
-  return (
-    <NavLink
-      to={to}
-      className={({ isActive }) =>
-        [
-          "px-3 py-2 rounded-lg text-sm font-medium transition-colors",
-          "text-zinc-300 hover:text-white",
-          isActive ? "bg-zinc-800/70 text-white border border-zinc-700" : "hover:bg-zinc-800/40"
-        ].join(' ')
-      }
-    >
-      {label}
-    </NavLink>
-  )
-}
+//function NavItem({ to, label }: { to: string; label: string }) {
+//  return (
+//    <NavLink
+//      to={to}
+//      className={({ isActive }) =>
+//        [
+//          "px-3 py-2 rounded-lg text-sm font-medium transition-colors",
+//          "text-zinc-300 hover:text-white",
+//          isActive ? "bg-zinc-800/70 text-white border border-zinc-700" : "hover:bg-zinc-800/40"
+//        ].join(' ')
+//      }
+//    >
+//      {label}
+//    </NavLink>
+// )
+//}
 
 export default function App() {
   return (
