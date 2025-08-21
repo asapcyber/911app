@@ -51,7 +51,7 @@ Frontend (React + Vite + Tailwind)
 ---
 
 ## Repository Structure
-
+```text
 .
 ├─ server/
 │ ├─ main.py # FastAPI app (API + MCP Agent)
@@ -74,7 +74,7 @@ Frontend (React + Vite + Tailwind)
 ├─ requirements.txt # Python dependencies
 ├─ package.json # Frontend dependencies
 └─ README.md # This file
-
+```
 
 ---
 
