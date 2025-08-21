@@ -27,9 +27,9 @@ export default function App() {
 <header className="sticky top-0 z-40 bg-white text-black border-b border-zinc-200">
   <div className="container mx-auto px-4 py-3 flex items-center gap-3">
     <img
-      src="/logo.svg"
+      src="/logo-sm.png"
       alt="112 Analyzer"
-      className="h-10 w-30"
+      className="h-10 w-10"
     />
     <div className="text-2xl text-[#154273] font-bold tracking-wide">
       112 Analyzer
