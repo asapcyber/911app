@@ -123,9 +123,110 @@ http://localhost:5173
 ---
 
 ## Backend (FastAPI)
-- **NLTK**: packaged with .nltk_data so no runtime download needed.  
+- **NLTK**: packaged with `.nltk_data` so no runtime download needed.  
 - **Matplotlib**: used for local sensitivity plots.  
-- **CORS**: configured via FRONTEND_ORIGIN env var.
+- **CORS**: configured via `FRONTEND_ORIGIN` env var.
 
 ---
 
+## Frontend (React + Vite + Tailwind)
+- **GaugeCard**: circular gauge with dynamic color (green → red).
+- **MapCard**: Leaflet map with default location (Amsterdam) until user enters coordinates.  
+- **SensitivityBar**: highlights most impactful keywords.
+
+---
+
+## ML Training & Database
+- **Pipeline**: `train_pipeline.py` trains TF-IDF vectorizer + classifier.
+- **Danger Score**: computed by `scoring.py`.  
+- **Sensitivity**: `analyzer.py` perturbs words, recomputes Δ-score.
+
+---
+
+## MCP Agent
+- Endpoints: 
+    - `POST /mcp/query` → contextual Q&A with OpenAI.
+    - `POST /mcp/reset` → resets session.
+- Compatible with **Responses** API and fallback to **Chat Completions API**.  
+
+---
+
+## Deployment (Render)
+### Backend (Web Service)
+- **Root**: `server/` 
+- **Build Command**:  
+```bash
+pip install -r requirements.txt
+```
+- **Start Command**:  
+```bash
+uvicorn main:app --host 0.0.0.0 --port $PORT
+```
+- **Env vars**:
+    - `OPENAI_API_KEY`
+    - `OPENAI_MODEL=gpt-4o-mini`
+    - `FRONTEND_ORIGIN=https://<frontend-url>`
+    - `PYTHONPATH=/opt/render/project/src/server`
+
+### Frontend (Static Site)
+- **Root**: `frontend/` 
+- **Build Command**:  
+```bash
+npm ci && npm run build
+```
+- **Publish Directory**: `dist/`
+- **Env Vars**:
+    - `VITE_API_BASE=https://<backend-url>`
+    - `VITE_MCP_BASE=https://<backend-url>`
+
+---
+
+## API Endpoints
+```bash
+GET  /health
+POST /api/score           { transcript }
+POST /api/sensitivity     { transcript, top_n? }
+POST /api/analyze         { transcript, top_n? }
+POST /api/sentiment       { transcript }
+POST /api/recommend       { transcript, score }
+POST /mcp/query           { session_id, query, context? }
+POST /mcp/reset           { session_id }
+
+```
+## Environment Variables
+### Backend (.env)
+```bash
+OPENAI_API_KEY=sk-...
+OPENAI_MODEL=gpt-4o-mini
+FRONTEND_ORIGIN=http://localhost:5173
+NLTK_DATA=server/.nltk_data
+```
+### Frontend (.env.local)
+```bash
+VITE_API_BASE=http://localhost:8000
+VITE_MCP_BASE=http://localhost:8000
+
+```
+---
+
+## Troubelshooting
+- **Frontend “Analyze” does nothing**:
+    Check browser console & network tab → API calls should hit `/api/analyze`.
+- **ModuleNotFoundError: analysis:**:
+    Ensure `analysis/` and `model/` dirs exist under `server/`.
+- `'OpenAI' object has no attribute 'responses'`:
+    Fixed in MCP agent fallback → ensure openai>=1.0.0.
+- **NLTK Errors**:
+    Bundle data under `server/.nltk_data`.
+
+---
+
+## Security & Disclaimer
+> [!WARNING]
+> This project is a **prototype**. Danger scoring, sensitivity, and MCP responses are experimental.
+Do not use in production emergency systems. Always require human review.
+
+---
+
+## License
+© 2025 — asapcyber
