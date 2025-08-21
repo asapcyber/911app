@@ -32,7 +32,7 @@ A modern, full-stack application for analyzing **112 emergency transcripts** wit
 ---
 
 ## Architecture
-
+```text
 Frontend (React + Vite + Tailwind)
 │ - Transcript analysis (danger score, sensitivity, radar, map)
 │ - MCP Agent tab
@@ -47,7 +47,7 @@ Frontend (React + Vite + Tailwind)
 │ /mcp/query, /mcp/reset -> OpenAI MCP Agent
 │
 └──→ ML model (.pkl joblib, Dutch vectorizer)
-
+```
 ---
 
 ## Repository Structure
